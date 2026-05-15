@@ -21,7 +21,31 @@ This repo is designed to be shared publicly without hosting your own app.
 
 You only need an OpenAI API key for the dry-run demo.
 
-### Option 1: Run locally
+### Option 1: Run the new web UI locally
+
+1. Copy `.env.example` to `.env`.
+2. Set `OPENAI_API_KEY` in `.env`.
+3. For a no-Fusion demo, keep:
+
+```env
+FUSION_BASE_URL=https://dummy.fa.us2.oraclecloud.com
+FUSION_USERNAME=demo.user@example.com
+FUSION_PASSWORD=testpassword
+DRY_RUN=true
+```
+
+4. Start the web app:
+
+```bash
+python -m pip install -r requirements.txt
+python -m uvicorn app:app --reload
+```
+
+5. Open [http://127.0.0.1:8000](http://127.0.0.1:8000)
+
+On Windows, you can also double-click `start_web.bat`.
+
+### Option 2: Run the CLI locally
 
 1. Copy `.env.example` to `.env`, or use the included `.env` for demo mode.
 2. Set `OPENAI_API_KEY` in `.env`.
@@ -34,7 +58,7 @@ python main.py --pdf quotes/sample_supplier_quote.pdf
 
 On Windows, you can also double-click `start_demo.bat`.
 
-### Option 2: Run in GitHub Codespaces
+### Option 3: Run in GitHub Codespaces
 
 1. Open the repository on GitHub.
 2. Click `Code` -> `Codespaces` -> `Create codespace on main`.
@@ -59,10 +83,12 @@ DRY_RUN=true
 5. Start the demo:
 
 ```bash
-./start_demo.sh
+./start_web.sh
 ```
 
-### Option 3: Run with GitHub Actions
+Then open port `8000` from the Codespaces `Ports` panel.
+
+### Option 4: Run with GitHub Actions
 
 This repo includes a manual workflow at `.github/workflows/dry-run-demo.yml`.
 
@@ -107,6 +133,8 @@ If `FUSION_BU_NAME` and `FUSION_REQUESTER_EMAIL` are not set, the app will try t
 - `quotes/sample_supplier_quote.pdf`
 - `start_demo.bat`
 - `start_demo.sh`
+- `start_web.bat`
+- `start_web.sh`
 
 ## Security notes
 

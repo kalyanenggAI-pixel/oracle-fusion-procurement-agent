@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oracle Fusion Procurement Agent</title>
+    <link rel="stylesheet" href="/static/app.css">
+</head>
+<body data-session-id="{{ session_id }}">
+    <div class="page-shell">
+        <header class="hero">
+            <div>
+                <p class="eyebrow">Oracle Fusion Procurement Agent</p>
+                <h1>From supplier quote to requisition, with the source PDF visible the whole time.</h1>
+                <p class="hero-copy">
+                    Load a quote, inspect what the model extracted, resolve Oracle mappings, and preview the requisition
+                    before anything is created.
+                </p>
+            </div>
+            <div class="hero-badges">
+                <span class="badge {{ 'live' if not dry_run else 'dry' }}">
+                    {{ 'DRY RUN MODE' if dry_run else 'LIVE FUSION MODE' }}
+                </span>
+                <span class="badge subtle">Session {{ session_id[:8] }}</span>
+            </div>
+        </header>
+
+        <main class="workspace">
+            <section class="left-column">
+                <div class="panel command-panel">
+                    <div class="panel-header">
+                        <div>
+                            <p class="panel-kicker">Workflow</p>
+                            <h2>Control Panel</h2>
+                        </div>
+                        <button id="reset-btn" class="ghost-button">Reset</button>
+                    </div>
+
+                    <div class="step-grid">
+                        <div class="step-card">
+                            <span class="step-index">01</span>
+                            <h3>Select a PDF</h3>
+                            <p>Use the bundled sample quote or upload your own supplier quote PDF.</p>
+                            <div class="action-row">
+                                <button id="sample-btn" class="primary-button">Use Sample PDF</button>
+                                <label class="upload-button">
+                                    Upload PDF
+                                    <input id="file-input" type="file" accept="application/pdf">
+                                </label>
+                            </div>
+                            <p id="selected-pdf" class="selected-file">No PDF selected yet.</p>
+                        </div>
+
+                        <div class="step-card">
+                            <span class="step-index">02</span>
+                            <h3>Extract quote lines</h3>
+                            <p>Parse the PDF and show the supplier, date, pricing, UOM, and category hints.</p>
+                            <button id="extract-btn" class="secondary-button">Extract Quote</button>
+                        </div>
+
+                        <div class="step-card">
+                            <span class="step-index">03</span>
+                            <h3>Resolve Oracle mappings</h3>
+                            <p>Map each line to an Oracle purchasing category and UOM code.</p>
+                            <button id="resolve-btn" class="secondary-button">Resolve Lines</button>
+                        </div>
+
+                        <div class="step-card">
+                            <span class="step-index">04</span>
+                            <h3>Create requisition</h3>
+                            <p>Review the preview first, then create the requisition or dry-run result.</p>
+                            <button id="create-btn" class="accent-button">Create Requisition</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel status-panel">
+                    <div class="panel-header">
+                        <div>
+                            <p class="panel-kicker">Timeline</p>
+                            <h2>What Happened</h2>
+                        </div>
+                    </div>
+                    <ul id="event-log" class="event-log"></ul>
+                </div>
+
+                <div class="panel data-panel">
+                    <div class="panel-header">
+                        <div>
+                            <p class="panel-kicker">Extraction</p>
+                            <h2>Quote Lines</h2>
+                        </div>
+                    </div>
+                    <div id="quote-summary" class="summary-strip"></div>
+                    <div id="quote-table-container" class="table-shell empty-state">
+                        Extract a PDF to see line items here.
+                    </div>
+                </div>
+
+                <div class="panel data-panel">
+                    <div class="panel-header">
+                        <div>
+                            <p class="panel-kicker">Resolution</p>
+                            <h2>Oracle Mapping Preview</h2>
+                        </div>
+                    </div>
+                    <div id="resolved-summary" class="summary-strip"></div>
+                    <div id="resolved-table-container" class="table-shell empty-state">
+                        Resolve the extracted lines to see Oracle categories and UOM codes.
+                    </div>
+                </div>
+
+                <div class="panel data-panel">
+                    <div class="panel-header">
+                        <div>
+                            <p class="panel-kicker">Result</p>
+                            <h2>Requisition Outcome</h2>
+                        </div>
+                    </div>
+                    <div id="result-container" class="result-shell empty-state">
+                        Create the requisition to see the final result here.
+                    </div>
+                </div>
+            </section>
+
+            <aside class="right-column">
+                <div class="panel pdf-panel">
+                    <div class="panel-header">
+                        <div>
+                            <p class="panel-kicker">Source Document</p>
+                            <h2>PDF Viewer</h2>
+                        </div>
+                    </div>
+                    <div class="pdf-frame-shell">
+                        <iframe id="pdf-frame" title="Supplier Quote PDF"></iframe>
+                    </div>
+                </div>
+            </aside>
+        </main>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

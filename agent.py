@@ -193,7 +193,20 @@ class FusionAgent:
             result = extract_quote_from_pdf(args["pdf_path"]).model_dump()
             self.last_quote = SupplierQuote.model_validate(result)
         elif name == "resolve_line_items":
-            result = resolve_all_lines(args["lines"])
+            lines = args.get("lines")
+            if not lines:
+                if self.last_quote is None:
+                    return {
+                        "error": (
+                            "No extracted quote lines are available yet. "
+                            "Call extract_quote_from_pdf before resolve_line_items."
+                        )
+                    }
+                LOGGER.warning(
+                    "resolve_line_items called without lines; using cached lines from the last extracted quote."
+                )
+                lines = [line.model_dump() for line in self.last_quote.lines]
+            result = resolve_all_lines(lines)
             self.last_resolved_payload = result
         elif name == "preview_requisition":
             result = format_preview(args["payload"])
