@@ -12,7 +12,7 @@ import requests
 from config import get_settings
 from models import PreviewSummary, RequisitionPayload, RequisitionResult
 from tools.fusion_auth import AuthenticationError, get_auth_header
-from tools.fusion_lookup import get_default_business_unit_name
+from tools.fusion_lookup import escape_oracle_q_value, get_default_business_unit_name
 
 LOGGER = logging.getLogger(__name__)
 REQUEST_TIMEOUT = 30
@@ -69,7 +69,7 @@ def get_requester_person_id(email: str) -> int:
         "GET",
         "workers",
         params={
-            "q": f'WorkEmail="{email}"',
+            "q": f'WorkEmail="{escape_oracle_q_value(email)}"',
             "fields": "PersonId,DisplayName",
         },
     )
@@ -109,7 +109,7 @@ def discover_requester_email() -> str:
             "GET",
             "workers",
             params={
-                "q": f'WorkEmail="{candidate}"',
+                "q": f'WorkEmail="{escape_oracle_q_value(candidate)}"',
                 "fields": "PersonId,DisplayName,WorkEmail",
             },
         )
@@ -138,8 +138,8 @@ def format_preview(payload: dict) -> dict:
     total_amount = sum(line.quantity * line.unit_price for line in requisition_payload.lines)
     preview = PreviewSummary(
         header_description=requisition_payload.header_description,
-        requester_email=requisition_payload.requester_email,
-        business_unit_name=requisition_payload.business_unit_name,
+        requester_email=requisition_payload.requester_email or "Needs configuration before live creation",
+        business_unit_name=requisition_payload.business_unit_name or "Needs configuration before live creation",
         currency=currency,
         total_amount=total_amount,
         lines=requisition_payload.lines,
@@ -155,6 +155,20 @@ def _extract_error_message(payload: dict) -> str:
     if messages:
         return " | ".join(messages)
     return payload.get("title") or payload.get("detail") or "Unknown Oracle Fusion error."
+
+
+def _extract_response_error(response: requests.Response) -> str:
+    """Extract the most useful error message from a Fusion or gateway response."""
+
+    try:
+        payload = response.json()
+    except ValueError:
+        text = (response.text or "").strip()
+        if text:
+            compact = " ".join(text.split())
+            return compact[:500]
+        return f"HTTP {response.status_code} with a non-JSON response body."
+    return _extract_error_message(payload)
 
 
 def create_requisition(payload: RequisitionPayload) -> RequisitionResult:
@@ -211,10 +225,14 @@ def create_requisition(payload: RequisitionPayload) -> RequisitionResult:
             continue
 
         if response.status_code in {400, 422}:
-            payload_json = response.json()
-            raise RuntimeError(_extract_error_message(payload_json))
+            raise RuntimeError(_extract_response_error(response))
 
         if response.status_code != 201:
+            if response.status_code in {301, 302, 303, 307, 308, 403}:
+                raise RuntimeError(
+                    "Oracle Fusion did not allow requisition creation. "
+                    f"HTTP {response.status_code}: {_extract_response_error(response)}"
+                )
             response.raise_for_status()
 
         response_json = response.json()

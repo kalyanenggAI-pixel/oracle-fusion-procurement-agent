@@ -19,6 +19,8 @@ from starlette.requests import Request
 from config import get_settings
 from models import RequisitionPayload, RequisitionResult
 from tools import create_requisition, extract_quote_from_pdf, format_preview, resolve_all_lines
+from tools.fusion_requisition import discover_requester_email
+from tools.fusion_lookup import get_default_business_unit_name
 
 LOGGER = logging.getLogger(__name__)
 ROOT_DIR = Path(__file__).resolve().parent
@@ -278,7 +280,13 @@ def create_from_preview(session_id: str = Query(...)) -> JSONResponse:
     if not state.resolved_payload:
         raise HTTPException(status_code=400, detail="Resolve the line items before creation.")
 
-    payload = RequisitionPayload.model_validate(state.resolved_payload)
+    live_payload = dict(state.resolved_payload)
+    if not live_payload.get("requester_email"):
+        live_payload["requester_email"] = discover_requester_email()
+    if not live_payload.get("business_unit_name"):
+        live_payload["business_unit_name"] = get_default_business_unit_name()
+
+    payload = RequisitionPayload.model_validate(live_payload)
     result = create_requisition(payload)
     state.requisition_result = RequisitionResult.model_validate(result).model_dump()
     state.add_event(

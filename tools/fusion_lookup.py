@@ -35,6 +35,12 @@ UOM_FALLBACK_MAP = {
 STOP_WORDS = {"and", "the", "for", "with", "from", "a", "an", "of"}
 
 
+def escape_oracle_q_value(value: str) -> str:
+    """Escape a string for Oracle Fusion q-parameter usage."""
+
+    return (value or "").replace("\\", "\\\\").replace('"', '\\"')
+
+
 def _request(method: str, endpoint: str, **kwargs: Any) -> dict:
     """Send an authenticated request to Oracle Fusion and return JSON."""
 
@@ -85,7 +91,7 @@ def get_business_unit_id(bu_name: str) -> int:
         "GET",
         "businessUnits",
         params={
-            "q": f'BusinessUnitName="{bu_name}"',
+            "q": f'BusinessUnitName="{escape_oracle_q_value(bu_name)}"',
             "fields": "BusinessUnitId,BusinessUnitName",
         },
     )
@@ -128,14 +134,15 @@ def get_default_business_unit_name() -> str:
             "Could not discover a Business Unit from Oracle Fusion. Set FUSION_BU_NAME manually."
         )
 
-    chosen_name = business_units[0]["BusinessUnitName"]
     if len(business_units) > 1:
-        LOGGER.warning(
-            "Multiple Business Units found. Defaulting to the first available BU: %s",
-            chosen_name,
+        available = ", ".join(unit["BusinessUnitName"] for unit in business_units[:10])
+        raise RuntimeError(
+            "Multiple Business Units are available in Oracle Fusion. "
+            f"Set FUSION_BU_NAME explicitly. Found: {available}"
         )
-    else:
-        LOGGER.info("Discovered default Business Unit: %s", chosen_name)
+
+    chosen_name = business_units[0]["BusinessUnitName"]
+    LOGGER.info("Discovered default Business Unit: %s", chosen_name)
     return chosen_name
 
 
@@ -148,7 +155,7 @@ def resolve_uom_details(uom_text: str) -> dict[str, str]:
             "GET",
             "unitOfMeasures",
             params={
-                "q": f'UnitOfMeasureName="{normalized}"',
+                "q": f'UnitOfMeasureName="{escape_oracle_q_value(normalized)}"',
                 "fields": "UomCode,UnitOfMeasureName",
             },
         )
@@ -198,7 +205,7 @@ def _search_category(keyword: str) -> tuple[int, str] | None:
         "GET",
         "purchasingCategories",
         params={
-            "q": f'CategoryName like "%{cleaned}%"',
+            "q": f'CategoryName like "%{escape_oracle_q_value(cleaned)}%"',
             "fields": "CategoryId,CategoryName,SegmentCode",
         },
     )
@@ -331,13 +338,11 @@ def resolve_category(item_description: str, category_hint: str) -> tuple[int, st
 def resolve_all_lines(lines: list[dict]) -> dict[str, Any]:
     """Resolve all quote lines to Oracle Fusion categories and UOMs."""
 
-    from tools.fusion_requisition import discover_requester_email
-
     settings = get_settings()
     resolved_lines: list[FusionLine] = []
     need_by_date = (date.today() + timedelta(days=7)).isoformat()
-    business_unit_name = get_default_business_unit_name()
-    requester_email = discover_requester_email()
+    business_unit_name = settings.fusion_bu_name or ""
+    requester_email = settings.fusion_requester_email or ""
 
     for line_dict in lines:
         quote_line = QuoteLine.model_validate(line_dict)
@@ -395,7 +400,8 @@ def resolve_all_lines(lines: list[dict]) -> dict[str, Any]:
         "total_amount": total_amount,
         "derivation_policy": (
             "Source values come from the supplier quote. Oracle-ready values such as category, UOM code, "
-            "and any future quantity/UOM conversions are derived from the connected Oracle environment."
+            "and any future quantity/UOM conversions are derived from the connected Oracle environment. "
+            "Requester and Business Unit may still require explicit configuration before live creation."
         ),
         "lines": [line.model_dump() for line in resolved_lines],
     }
