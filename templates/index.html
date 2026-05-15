@@ -11,10 +11,10 @@
         <header class="hero">
             <div>
                 <p class="eyebrow">Oracle Fusion Procurement Agent</p>
-                <h1>From supplier quote to requisition, with the source PDF visible the whole time.</h1>
+                <h1>Prepare the requisition in one pass, with the source quote visible beside it.</h1>
                 <p class="hero-copy">
-                    Load a quote, inspect what the model extracted, resolve Oracle mappings, and preview the requisition
-                    before anything is created.
+                    This screen mirrors a Fusion-style review flow: load a supplier quote, let the agent prepare
+                    extraction and Oracle mapping automatically, then review the preview before final creation.
                 </p>
             </div>
             <div class="hero-badges">
@@ -31,7 +31,7 @@
                     <div class="panel-header">
                         <div>
                             <p class="panel-kicker">Workflow</p>
-                            <h2>Control Panel</h2>
+                            <h2>Agent Run</h2>
                         </div>
                         <button id="reset-btn" class="ghost-button">Reset</button>
                     </div>
@@ -39,7 +39,7 @@
                     <div class="step-grid">
                         <div class="step-card">
                             <span class="step-index">01</span>
-                            <h3>Select a PDF</h3>
+                            <h3>Select source PDF</h3>
                             <p>Use the bundled sample quote or upload your own supplier quote PDF.</p>
                             <div class="action-row">
                                 <button id="sample-btn" class="primary-button">Use Sample PDF</button>
@@ -53,23 +53,30 @@
 
                         <div class="step-card">
                             <span class="step-index">02</span>
-                            <h3>Extract quote lines</h3>
-                            <p>Parse the PDF and show the supplier, date, pricing, UOM, and category hints.</p>
-                            <button id="extract-btn" class="secondary-button">Extract Quote</button>
+                            <h3>Prepare everything</h3>
+                            <p>One click will extract the quote, resolve Oracle mappings, and generate the requisition preview.</p>
+                            <button id="prepare-btn" class="accent-button">Prepare Requisition Preview</button>
                         </div>
 
                         <div class="step-card">
                             <span class="step-index">03</span>
-                            <h3>Resolve Oracle mappings</h3>
-                            <p>Map each line to an Oracle purchasing category and UOM code.</p>
-                            <button id="resolve-btn" class="secondary-button">Resolve Lines</button>
+                            <h3>Review prepared output</h3>
+                            <p>Inspect extracted lines, Oracle mappings, and the requisition preview before creation.</p>
+                            <div class="review-note">The agent stops before creation so the user can confirm.</div>
                         </div>
 
                         <div class="step-card">
                             <span class="step-index">04</span>
-                            <h3>Create requisition</h3>
-                            <p>Review the preview first, then create the requisition or dry-run result.</p>
-                            <button id="create-btn" class="accent-button">Create Requisition</button>
+                            <h3>Final confirmation</h3>
+                            <p>Create the requisition only after the preview looks correct.</p>
+                            <button
+                                id="create-btn"
+                                class="secondary-button"
+                                data-dry-run-label="Create Requisition (Dry Run)"
+                                data-live-label="Send to Oracle Fusion"
+                            >
+                                {{ "Create Requisition (Dry Run)" if dry_run else "Send to Oracle Fusion" }}
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -128,11 +135,13 @@
                     <div class="panel-header">
                         <div>
                             <p class="panel-kicker">Source Document</p>
-                            <h2>PDF Viewer</h2>
+                            <h2>Quote Viewer</h2>
                         </div>
                     </div>
                     <div class="pdf-frame-shell">
-                        <iframe id="pdf-frame" title="Supplier Quote PDF"></iframe>
+                        <div id="pdf-pages" class="pdf-pages empty-state">
+                            Select a PDF to render it inside this panel.
+                        </div>
                     </div>
                 </div>
             </aside>

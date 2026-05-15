@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import shutil
 import uuid
@@ -10,6 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import fitz
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -17,7 +17,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
 from config import get_settings
-from models import RequisitionPayload, RequisitionResult, SupplierQuote
+from models import RequisitionPayload, RequisitionResult
 from tools import create_requisition, extract_quote_from_pdf, format_preview, resolve_all_lines
 
 LOGGER = logging.getLogger(__name__)
@@ -26,8 +26,10 @@ STATIC_DIR = ROOT_DIR / "static"
 TEMPLATES_DIR = ROOT_DIR / "templates"
 UPLOADS_DIR = ROOT_DIR / "uploads"
 SAMPLE_PDF = ROOT_DIR / "quotes" / "sample_supplier_quote.pdf"
+RENDERED_PDF_DIR = ROOT_DIR / "uploads" / "rendered_pages"
 
 UPLOADS_DIR.mkdir(exist_ok=True)
+RENDERED_PDF_DIR.mkdir(parents=True, exist_ok=True)
 
 
 @dataclass
@@ -56,6 +58,7 @@ class WorkflowState:
             "pdf_name": self.pdf_name,
             "pdf_selected": bool(self.pdf_path),
             "pdf_url": f"/api/pdf/current?session_id={self.session_id}" if self.pdf_path else None,
+            "pdf_pages": get_pdf_page_urls(self.session_id, self.pdf_path) if self.pdf_path else [],
             "quote": self.quote,
             "resolved_payload": self.resolved_payload,
             "preview": self.preview,
@@ -90,6 +93,33 @@ def require_state(session_id: str) -> WorkflowState:
     if state is None:
         raise HTTPException(status_code=404, detail="Session not found. Refresh the page.")
     return state
+
+
+def render_pdf_pages(session_id: str, pdf_path: str) -> list[Path]:
+    """Render a PDF into page images for stable in-app viewing."""
+
+    render_dir = RENDERED_PDF_DIR / session_id
+    render_dir.mkdir(parents=True, exist_ok=True)
+    existing = sorted(render_dir.glob("page-*.png"))
+    if existing:
+        return existing
+
+    pdf_file = Path(pdf_path)
+    with fitz.open(pdf_file) as document:
+        for page_index, page in enumerate(document, start=1):
+            pixmap = page.get_pixmap(matrix=fitz.Matrix(1.7, 1.7), alpha=False)
+            output = render_dir / f"page-{page_index}.png"
+            pixmap.save(output)
+    return sorted(render_dir.glob("page-*.png"))
+
+
+def get_pdf_page_urls(session_id: str, pdf_path: str | None) -> list[str]:
+    """Return image URLs for rendered PDF pages."""
+
+    if not pdf_path:
+        return []
+    page_paths = render_pdf_pages(session_id, pdf_path)
+    return [f"/api/pdf/page/{page.name}?session_id={session_id}" for page in page_paths]
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -168,6 +198,17 @@ def current_pdf(session_id: str = Query(...)) -> FileResponse:
     return FileResponse(state.pdf_path, media_type="application/pdf", filename=state.pdf_name)
 
 
+@app.get("/api/pdf/page/{page_name}")
+def current_pdf_page(page_name: str, session_id: str = Query(...)) -> FileResponse:
+    """Serve a rendered PDF page image for the current session."""
+
+    require_state(session_id)
+    page_path = RENDERED_PDF_DIR / session_id / page_name
+    if not page_path.exists():
+        raise HTTPException(status_code=404, detail="Rendered PDF page not found.")
+    return FileResponse(page_path, media_type="image/png", filename=page_name)
+
+
 @app.post("/api/extract")
 def extract_pdf(session_id: str = Query(...)) -> JSONResponse:
     """Extract structured quote lines from the selected PDF."""
@@ -184,6 +225,30 @@ def extract_pdf(session_id: str = Query(...)) -> JSONResponse:
     state.add_event(
         f"Extracted {len(quote.lines)} line items from {quote.supplier_name} dated {quote.quote_date}."
     )
+    return JSONResponse(state.to_dict())
+
+
+@app.post("/api/prepare")
+def prepare_requisition(session_id: str = Query(...)) -> JSONResponse:
+    """Run the agent flow through extraction, mapping, and preview in one action."""
+
+    state = require_state(session_id)
+    if not state.pdf_path:
+        raise HTTPException(status_code=400, detail="Select or upload a PDF first.")
+
+    quote = extract_quote_from_pdf(state.pdf_path)
+    state.quote = quote.model_dump()
+    state.add_event(
+        f"Extracted {len(quote.lines)} line items from {quote.supplier_name} dated {quote.quote_date}."
+    )
+
+    resolved_payload = resolve_all_lines(state.quote.get("lines", []))
+    preview = format_preview(resolved_payload)
+    state.resolved_payload = resolved_payload
+    state.preview = preview
+    state.requisition_result = None
+    state.add_event("Resolved Oracle Fusion categories and UOM codes.")
+    state.add_event("Prepared requisition preview. Ready for final creation confirmation.")
     return JSONResponse(state.to_dict())
 
 

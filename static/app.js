@@ -7,8 +7,9 @@ const resolvedSummary = document.getElementById("resolved-summary");
 const quoteTableContainer = document.getElementById("quote-table-container");
 const resolvedTableContainer = document.getElementById("resolved-table-container");
 const resultContainer = document.getElementById("result-container");
-const pdfFrame = document.getElementById("pdf-frame");
+const pdfPages = document.getElementById("pdf-pages");
 const commandPanel = document.querySelector(".command-panel");
+const createButton = document.getElementById("create-btn");
 
 function apiUrl(path) {
     return `${path}?session_id=${encodeURIComponent(sessionId)}`;
@@ -107,12 +108,34 @@ function renderMetrics(result) {
     return wrapper;
 }
 
+function renderPdfPages(pageUrls) {
+    if (!pageUrls || !pageUrls.length) {
+        pdfPages.className = "pdf-pages empty-state";
+        pdfPages.textContent = "Select a PDF to render it inside this panel.";
+        return;
+    }
+
+    pdfPages.className = "pdf-pages";
+    pdfPages.innerHTML = "";
+    pageUrls.forEach((url, index) => {
+        const image = document.createElement("img");
+        image.className = "pdf-page";
+        image.alt = `PDF page ${index + 1}`;
+        image.src = `${url}&t=${Date.now()}`;
+        pdfPages.appendChild(image);
+    });
+}
+
 function renderState(state) {
+    createButton.textContent = state.dry_run
+        ? createButton.dataset.dryRunLabel
+        : createButton.dataset.liveLabel;
+
     selectedPdf.textContent = state.pdf_selected
         ? `Selected PDF: ${state.pdf_name}`
         : "No PDF selected yet.";
 
-    pdfFrame.src = state.pdf_url ? `${state.pdf_url}#view=FitH` : "about:blank";
+    renderPdfPages(state.pdf_pages || []);
     renderEvents(state.events || []);
 
     if (state.quote) {
@@ -170,6 +193,12 @@ function renderState(state) {
     if (state.requisition_result) {
         resultContainer.className = "result-shell";
         resultContainer.innerHTML = "";
+        if (state.dry_run) {
+            const note = document.createElement("div");
+            note.className = "summary-chip";
+            note.textContent = "Dry run only. Nothing was sent to Oracle Fusion.";
+            resultContainer.appendChild(note);
+        }
         resultContainer.appendChild(renderMetrics(state.requisition_result));
     } else {
         resultContainer.className = "result-shell empty-state";
@@ -220,17 +249,9 @@ document.getElementById("file-input").addEventListener("change", async (event) =
     }
 });
 
-document.getElementById("extract-btn").addEventListener("click", async () => {
+document.getElementById("prepare-btn").addEventListener("click", async () => {
     try {
-        renderState(await callJson("/api/extract", { method: "POST" }));
-    } catch (error) {
-        showError(error.message);
-    }
-});
-
-document.getElementById("resolve-btn").addEventListener("click", async () => {
-    try {
-        renderState(await callJson("/api/resolve", { method: "POST" }));
+        renderState(await callJson("/api/prepare", { method: "POST" }));
     } catch (error) {
         showError(error.message);
     }

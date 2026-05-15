@@ -45,6 +45,13 @@ python -m uvicorn app:app --reload
 
 On Windows, you can also double-click `start_web.bat`.
 
+In the web UI:
+
+1. Select the sample PDF or upload your own
+2. Click `Prepare Requisition Preview`
+3. Review the extracted lines, Oracle mappings, and requisition preview
+4. Click `Create Requisition` only if you want the final dry-run or live creation step
+
 ### Option 2: Run the CLI locally
 
 1. Copy `.env.example` to `.env`, or use the included `.env` for demo mode.
