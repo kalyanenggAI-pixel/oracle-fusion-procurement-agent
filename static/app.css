@@ -200,6 +200,16 @@ body {
     line-height: 1.5;
 }
 
+.policy-note {
+    margin: 0 24px;
+    padding: 14px 16px;
+    border-left: 4px solid #8a6f59;
+    border-radius: 12px;
+    background: rgba(109, 86, 66, 0.08);
+    color: #5b4c41;
+    line-height: 1.5;
+}
+
 .action-row {
     display: flex;
     flex-wrap: wrap;

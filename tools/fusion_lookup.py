@@ -139,8 +139,8 @@ def get_default_business_unit_name() -> str:
     return chosen_name
 
 
-def resolve_uom(uom_text: str) -> str:
-    """Resolve a raw UOM label to an Oracle Fusion UOM code."""
+def resolve_uom_details(uom_text: str) -> dict[str, str]:
+    """Resolve a raw UOM label to an Oracle Fusion UOM code with derivation metadata."""
 
     normalized = (uom_text or "").strip()
     if normalized:
@@ -156,15 +156,35 @@ def resolve_uom(uom_text: str) -> str:
         if items:
             uom_code = items[0]["UomCode"]
             LOGGER.info("Resolved UOM %s to %s via Fusion lookup", normalized, uom_code)
-            return uom_code
+            return {
+                "uom_code": uom_code,
+                "derivation_source": "oracle_uom_lookup",
+                "derivation_notes": f'Oracle UOM lookup matched source UOM "{normalized}".',
+            }
 
     fallback = UOM_FALLBACK_MAP.get(normalized.lower())
     if fallback:
         LOGGER.warning("Using fallback UOM mapping for %s -> %s", normalized, fallback)
-        return fallback
+        return {
+            "uom_code": fallback,
+            "derivation_source": "fallback_uom_map",
+            "derivation_notes": (
+                f'Oracle UOM was not matched directly. Used fallback map from "{normalized}" to "{fallback}".'
+            ),
+        }
 
     LOGGER.warning('UOM "%s" was not found. Defaulting to "Ea".', normalized or "<empty>")
-    return "Ea"
+    return {
+        "uom_code": "Ea",
+        "derivation_source": "default_uom",
+        "derivation_notes": 'Oracle UOM could not be derived. Defaulted to "Ea".',
+    }
+
+
+def resolve_uom(uom_text: str) -> str:
+    """Resolve a raw UOM label to an Oracle Fusion UOM code."""
+
+    return resolve_uom_details(uom_text)["uom_code"]
 
 
 def _search_category(keyword: str) -> tuple[int, str] | None:
@@ -241,13 +261,18 @@ def _get_first_available_category() -> tuple[int, str]:
     return int(items[0]["CategoryId"]), items[0]["CategoryName"]
 
 
-def resolve_category(item_description: str, category_hint: str) -> tuple[int, str]:
-    """Resolve an item description to an Oracle Fusion purchasing category."""
+def resolve_category_details(item_description: str, category_hint: str) -> dict[str, Any]:
+    """Resolve an item description to an Oracle Fusion category with derivation metadata."""
 
     if get_settings().dry_run:
         fallback_name = category_hint.strip() or " ".join(_meaningful_words(item_description)) or "General"
         LOGGER.info("DRY_RUN category resolution for %s -> %s", item_description, fallback_name)
-        return 0, fallback_name.title()
+        return {
+            "category_id": 0,
+            "category_name": fallback_name.title(),
+            "derivation_source": "dry_run_hint",
+            "derivation_notes": "Dry-run category derived from extracted hint/description heuristics.",
+        }
 
     search_terms: list[str] = []
     if category_hint.strip():
@@ -260,7 +285,12 @@ def resolve_category(item_description: str, category_hint: str) -> tuple[int, st
         match = _search_category(term)
         if match:
             LOGGER.info("Resolved category for %s via keyword %s", item_description, term)
-            return match
+            return {
+                "category_id": match[0],
+                "category_name": match[1],
+                "derivation_source": "oracle_category_lookup",
+                "derivation_notes": f'Oracle category matched using keyword "{term}".',
+            }
 
     try:
         suggested = _suggest_category_keyword(item_description)
@@ -272,11 +302,30 @@ def resolve_category(item_description: str, category_hint: str) -> tuple[int, st
         match = _search_category(suggested)
         if match:
             LOGGER.info("Resolved category for %s via OpenAI keyword %s", item_description, suggested)
-            return match
+            return {
+                "category_id": match[0],
+                "category_name": match[1],
+                "derivation_source": "oracle_category_lookup_with_ai_hint",
+                "derivation_notes": (
+                    f'Oracle category matched after AI suggested the keyword "{suggested}".'
+                ),
+            }
 
     fallback = _get_first_available_category()
     LOGGER.warning("Falling back to first available category for %s -> %s", item_description, fallback[1])
-    return fallback
+    return {
+        "category_id": fallback[0],
+        "category_name": fallback[1],
+        "derivation_source": "oracle_category_default",
+        "derivation_notes": "No strong Oracle category match was found. Used the first available category.",
+    }
+
+
+def resolve_category(item_description: str, category_hint: str) -> tuple[int, str]:
+    """Resolve an item description to an Oracle Fusion purchasing category."""
+
+    details = resolve_category_details(item_description, category_hint)
+    return int(details["category_id"]), str(details["category_name"])
 
 
 def resolve_all_lines(lines: list[dict]) -> dict[str, Any]:
@@ -292,11 +341,29 @@ def resolve_all_lines(lines: list[dict]) -> dict[str, Any]:
 
     for line_dict in lines:
         quote_line = QuoteLine.model_validate(line_dict)
-        category_id, category_name = resolve_category(
+        category_details = resolve_category_details(
             quote_line.item_description,
             quote_line.category_hint,
         )
-        uom_code = resolve_uom(quote_line.unit_of_measure)
+        uom_details = resolve_uom_details(quote_line.unit_of_measure)
+        category_id = int(category_details["category_id"])
+        category_name = str(category_details["category_name"])
+        uom_code = str(uom_details["uom_code"])
+        derivation_source = (
+            "oracle_derived"
+            if category_details["derivation_source"].startswith("oracle")
+            or uom_details["derivation_source"].startswith("oracle")
+            else "fallback_derived"
+        )
+        derivation_notes = " ".join(
+            note
+            for note in [
+                category_details.get("derivation_notes", ""),
+                uom_details.get("derivation_notes", ""),
+                "Quantity and price are currently preserved from the quote unless Oracle-specific item conversions are added.",
+            ]
+            if note
+        )
         resolved_lines.append(
             FusionLine(
                 line_number=quote_line.line_number,
@@ -308,6 +375,14 @@ def resolve_all_lines(lines: list[dict]) -> dict[str, Any]:
                 category_id=category_id,
                 category_name=category_name,
                 need_by_date=need_by_date,
+                source_quantity=quote_line.quantity,
+                source_unit_price=quote_line.unit_price,
+                source_currency=quote_line.currency or settings.fusion_currency,
+                source_unit_of_measure=quote_line.unit_of_measure,
+                normalized_quantity=quote_line.quantity,
+                normalized_unit_price=quote_line.unit_price,
+                derivation_source=derivation_source,
+                derivation_notes=derivation_notes,
             )
         )
 
@@ -318,5 +393,9 @@ def resolve_all_lines(lines: list[dict]) -> dict[str, Any]:
         "business_unit_name": business_unit_name,
         "currency": resolved_lines[0].currency if resolved_lines else settings.fusion_currency,
         "total_amount": total_amount,
+        "derivation_policy": (
+            "Source values come from the supplier quote. Oracle-ready values such as category, UOM code, "
+            "and any future quantity/UOM conversions are derived from the connected Oracle environment."
+        ),
         "lines": [line.model_dump() for line in resolved_lines],
     }

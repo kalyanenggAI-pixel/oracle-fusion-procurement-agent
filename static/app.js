@@ -7,6 +7,7 @@ const resolvedSummary = document.getElementById("resolved-summary");
 const quoteTableContainer = document.getElementById("quote-table-container");
 const resolvedTableContainer = document.getElementById("resolved-table-container");
 const resultContainer = document.getElementById("result-container");
+const policyNote = document.getElementById("policy-note");
 const pdfPages = document.getElementById("pdf-pages");
 const commandPanel = document.querySelector(".command-panel");
 const createButton = document.getElementById("create-btn");
@@ -171,21 +172,39 @@ function renderState(state) {
             `Total: ${money(state.preview.currency, state.preview.total_amount)}`,
             `Lines: ${state.preview.lines.length}`,
         ]);
+        policyNote.className = "policy-note";
+        policyNote.textContent = state.resolved_payload.derivation_policy || "Oracle-derived values are shown alongside source quote values.";
         resolvedTableContainer.className = "table-shell";
         resolvedTableContainer.innerHTML = "";
         const rows = state.preview.lines.map((line) => [
             String(line.line_number),
             line.item_description,
+            `${line.source_quantity} ${line.source_unit_of_measure}`,
+            `${line.normalized_quantity} ${line.uom_code}`,
             line.category_name,
-            line.uom_code,
-            line.need_by_date,
+            line.derivation_source,
             money(line.currency, line.unit_price),
+            line.derivation_notes,
         ]);
         resolvedTableContainer.appendChild(
-            renderTable(["Line", "Item", "Oracle Category", "UOM", "Need By", "Unit Price"], rows)
+            renderTable(
+                [
+                    "Line",
+                    "Item",
+                    "Source Qty/UOM",
+                    "Oracle Qty/UOM",
+                    "Oracle Category",
+                    "Derivation",
+                    "Oracle Price",
+                    "Notes",
+                ],
+                rows
+            )
         );
     } else {
         resolvedSummary.innerHTML = "";
+        policyNote.className = "policy-note empty-state";
+        policyNote.textContent = "Prepare the requisition to see how Oracle-derived fields differ from the source quote.";
         resolvedTableContainer.className = "table-shell empty-state";
         resolvedTableContainer.textContent = "Resolve the extracted lines to see Oracle categories and UOM codes.";
     }

@@ -38,6 +38,14 @@ class FusionLine(BaseModel):
     category_id: int
     category_name: str
     need_by_date: str
+    source_quantity: float
+    source_unit_price: float
+    source_currency: str
+    source_unit_of_measure: str
+    normalized_quantity: float
+    normalized_unit_price: float
+    derivation_source: str
+    derivation_notes: str = ""
 
 
 class RequisitionPayload(BaseModel):

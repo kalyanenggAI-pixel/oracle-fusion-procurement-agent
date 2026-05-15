@@ -62,7 +62,7 @@
                             <span class="step-index">03</span>
                             <h3>Review prepared output</h3>
                             <p>Inspect extracted lines, Oracle mappings, and the requisition preview before creation.</p>
-                            <div class="review-note">The agent stops before creation so the user can confirm.</div>
+                            <div class="review-note">The agent stops before creation so the user can confirm. Source PDF values stay visible, while Oracle-derived values are shown separately in the preview.</div>
                         </div>
 
                         <div class="step-card">
@@ -108,10 +108,13 @@
                     <div class="panel-header">
                         <div>
                             <p class="panel-kicker">Resolution</p>
-                            <h2>Oracle Mapping Preview</h2>
+                            <h2>Oracle Derived Preview</h2>
                         </div>
                     </div>
                     <div id="resolved-summary" class="summary-strip"></div>
+                    <div id="policy-note" class="policy-note empty-state">
+                        Prepare the requisition to see how Oracle-derived fields differ from the source quote.
+                    </div>
                     <div id="resolved-table-container" class="table-shell empty-state">
                         Resolve the extracted lines to see Oracle categories and UOM codes.
                     </div>
